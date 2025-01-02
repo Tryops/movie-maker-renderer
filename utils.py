@@ -20,7 +20,7 @@ def get_rotation_steps(video_clip_info): # returns rotation steps of video clip,
     return 0
 
 def play_notification_sound():
-    print('\007') # play the bell/error notification sound e.g. to know when rendering is finished
+    print('\007', end='') # play the bell/error notification sound e.g. to know when rendering is finished, also dont print a newline
 
 def check_file_exists(file):
     if(not os.path.isfile(file)):

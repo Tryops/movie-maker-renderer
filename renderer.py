@@ -32,10 +32,9 @@ def render(project_file: str, output_file: str, output_width: int, output_height
     log(f'Overwrite pre-existing output file: {overwrite_existing_file}')
     log('--------------------------------------')
 
-    # TODO fix font scaling with resolution
-    # TODO add image rendering
+    log('Start time: ' + str(get_current_datetime()))
 
-    log('Start time: ' + str(get_current_datetime()) + '\n')
+    # TODO add image rendering
 
     if not overwrite_existing_file:
         prevent_file_overwrite(output_file)
@@ -82,11 +81,11 @@ def render(project_file: str, output_file: str, output_width: int, output_height
             media_extent_ids = extent_refs['ExtentRef']
             media_extent_ids = list(map(lambda id: id['@id'], media_extent_ids))
         else:
-            print(f"Info: Clip category '{placeholder_id}' has no entries. ")
+            log(f"Info: Clip category '{placeholder_id}' has no entries. ")
         placeholder_ids[placeholder_id] = media_extent_ids
         # not try catch here because entry for referenced extent is always in the file (probably)
 
-    log('Reading order of video/title/audio clips done!')
+    log('Reading order of clips done!')
 
     # prepare extent categories for later:
     title_extents = movie_maker_dict['Project']['Extents'].get('TitleClip', []) # empty if key not present in extents
@@ -249,13 +248,13 @@ def render(project_file: str, output_file: str, output_width: int, output_height
         text_string = '\n'.join(list(map(lambda entry: entry['@Value'], text_strings))) # concat text string entries to string with line breaks
 
         font_size = next(filter(lambda entry: entry['@Name'] == 'size', title_extent['Effects']['TextEffect']['BoundProperties']['BoundPropertyFloat'])) # get font size entry
-        font_size = int(float(font_size['@Value']) * 60) # calculate approximate font size in point unit, factor is approx 60, but could also be 64 or similar
+        font_size = int(float(font_size['@Value']) * 110) # calculate approximate font size in point unit, factor is approx 110 (in combination with font_scale_factor)
+        
+        font_scale_factor = output_settings['width'] / 1280 # scale font size to output resolution to always appear roughly the same size (like it would in HD = width 1280 px), otherwise the text would be too small in higher resolutions
+        font_size = int(font_size * font_scale_factor)
+        text_outline_size = int(text_outline_size * font_scale_factor)
 
         # OPTIONAL: add text transparency
-
-        # pprint(title_extent)
-        # continue
-        # exit()
 
         should_scroll = title_extent['Effects'] and title_extent['Effects']['TextEffect'] and title_extent['Effects']['TextEffect']['@effectTemplateID'] == 'TextEffectScrollTemplate' # default other effect: 'TextEffectFadeZoomTemplate'
 
@@ -333,11 +332,8 @@ def render(project_file: str, output_file: str, output_width: int, output_height
     log('Opening explorer...')
     open_explorer_on_file(output_file)
     log('Opening explorer done!')
-
     log('Playing sound...')
     play_notification_sound()
     log('Playing sound done!')
-    # TODO at end open explorer with rendered file selected
-
+    log('End time: ' + str(get_current_datetime()))
     log('Rendering finished!')
-    print('\nEnd time: ' + str(get_current_datetime()) + '\n')
