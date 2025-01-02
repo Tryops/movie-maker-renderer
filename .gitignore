@@ -1,5 +1,5 @@
-testvideos/
-movie maker output/
 __pycache__
+testvideos/
+movie_maker_output/
 result.mp4
-resultTEMP_MPY_wvf_snd.mp3
+*TEMP_MPY_wvf_snd.mp3
