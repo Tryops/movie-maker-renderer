@@ -22,37 +22,34 @@ def render(project_file: str, output_file: str, output_width: int, output_height
         'fps': int(output_fps)
     }
 
-    print('Rendering with the following settings:')
-    print('--------------------------------------')
-    print(f'Project file: "{project_file}"')
-    print(f'Output file: "{output_file}"')
-    print(f'Output width: {output_width} px')
-    print(f'Output height: {output_height} px')
-    print(f'Output fps: {output_file}')
-    print(f'Overwrite pre-existing output file: {overwrite_existing_file}')
-    print('--------------------------------------')
+    log('Rendering with the following settings:')
+    log('--------------------------------------')
+    log(f'Project file: "{project_file}"')
+    log(f'Output file: "{output_file}"')
+    log(f'Output width: {output_width} px')
+    log(f'Output height: {output_height} px')
+    log(f'Output fps: {output_file}')
+    log(f'Overwrite pre-existing output file: {overwrite_existing_file}')
+    log('--------------------------------------')
 
     # TODO fix font scaling with resolution
     # TODO add image rendering
 
-    print('Start time: ' + str(get_current_datetime()) + '\n')
+    log('Start time: ' + str(get_current_datetime()) + '\n')
 
     if not overwrite_existing_file:
         prevent_file_overwrite(output_file)
     elif os.path.exists(output_file):
-        print(f'File "{output_file}" already exists and will be overwritten (--overwrite-existing-file)')
+        log(f'File "{output_file}" already exists and will be overwritten (--overwrite-existing-file)')
 
-    log('Reading project file...')
     movie_maker_file = project_file
     with open(movie_maker_file, 'r', encoding='utf-8') as file:
         xml_string = file.read()
-    log('Reading project file done.')
+    log('Reading project file done!')
 
-    log('Parsing project file...')
     movie_maker_dict = xmltodict.parse(xml_string, force_list=('BoundPropertyBool', 'BoundPropertyFloat', 'BoundPropertyInt', 'BoundPropertyString', 'BoundPropertyFloatSet', 'BoundPropertyStringSet', 'BoundPropertyStringElement', 'ExtentRef', 'TitleClip', 'VideoClip', 'AudioClip'))
-    log('Parsing project file done.')
+    log('Parsing project file done!')
 
-    log('Reading order of video/title/audio clips...')
     media_items_array = movie_maker_dict['Project']['MediaItems']['MediaItem']
     media_items = {} # using dict instead of array because there can be number gaps in media items
     for media_item in media_items_array:
@@ -89,7 +86,7 @@ def render(project_file: str, output_file: str, output_width: int, output_height
         placeholder_ids[placeholder_id] = media_extent_ids
         # not try catch here because entry for referenced extent is always in the file (probably)
 
-    log('Reading order of video/title/audio clips done.')
+    log('Reading order of video/title/audio clips done!')
 
     # prepare extent categories for later:
     title_extents = movie_maker_dict['Project']['Extents'].get('TitleClip', []) # empty if key not present in extents
@@ -100,10 +97,10 @@ def render(project_file: str, output_file: str, output_width: int, output_height
     # then build main video sequence:
     video_clips = []
     previous_clip_end = 0.0
-    for extent_id in placeholder_ids['Main']:
+    for i, extent_id in enumerate(placeholder_ids['Main']):
+        log(f'Adding video/title clip {i+1}/{len(placeholder_ids["Main"])} (ID {extent_id}):')
         is_title_clip = any(extent['@extentID'] == extent_id for extent in title_extents)
         if(is_title_clip): # when its a title clip then it must be a background color clip because movie maker saves these under title clips for some reason
-            log(f'Adding color clip {extent_id}...')
             title_extent = get_extent(extent_id, title_extents)
             colors = next(filter(lambda entry: entry['@Name'] == 'diffuseColor', title_extent['BoundProperties']['BoundPropertyFloatSet']))['BoundPropertyFloatElement'] # get rgb color entries
             colors = list(map(lambda entry: int(round(float(entry['@Value']) * 255)), colors)) # parse rgb color entries to 0 - 255 values
@@ -116,9 +113,8 @@ def render(project_file: str, output_file: str, output_width: int, output_height
             )
             video_clips.append(color_clip)
             previous_clip_end += color_clip.duration # always append next video/color clip to end of previous one
-            log(f'Added color clip {extent_id}.')
+            log(f'Added color clip (ID {extent_id})!')
         else: # must be video extent
-            log(f'Adding video clip {extent_id}...')
             video_extent = get_extent(extent_id, video_extents)
             crop_start = float(video_extent['@inTime'])
             crop_end = float(video_extent['@outTime'])
@@ -142,7 +138,7 @@ def render(project_file: str, output_file: str, output_width: int, output_height
 
             file = media_items[video_extent['@mediaItemID']]
             check_file_exists(file) # check if media file exists to avoid strange moviepy errors later on when rendering
-            log(f'Preloading video clip {extent_id} ("{file}")...')
+            log(f'Preloading video clip "{file}" (ID {extent_id})...')
             video_clip = VideoFileClip(file) # on seperate line so video duration/end attributes can be read
             video_clip = (
                 video_clip
@@ -161,22 +157,22 @@ def render(project_file: str, output_file: str, output_width: int, output_height
             )
             video_clips.append(video_clip)
             previous_clip_end += video_clip.duration - crossfade_duration # always append next video/color clip to end of previous one
-            log(f'Added video clip {extent_id} ("{file}").')
+            log(f'Added video clip "{file}" (ID {extent_id})!')
 
     total_video_duration = previous_clip_end # renamed for better understanding in audio part
-    log('Building video clips done.')
+    log('Building video clips done!')
 
     log('Start building audio clips.')
     # then build audio clips (similar to video clips):
     audio_clips = []
     previous_clip_end = 0.0
     for i, extent_id in enumerate(placeholder_ids['SoundTrack']): # also access to index to detect last element
-        log(f'Adding audio clip {extent_id}...')
+        log(f'Adding audio clip {i+1}/{len(placeholder_ids["SoundTrack"])} (ID {extent_id}):')
         audio_extent = get_extent(extent_id, audio_extents)
 
         file = media_items[audio_extent['@mediaItemID']]
         check_file_exists(file) # check if media file exists to avoid moviepy errors when rendering
-        log(f'Preloading audio clip {extent_id} ("{file}")...')
+        log(f'Preloading audio clip "{file}" (ID {extent_id})...')
         audio_clip = AudioFileClip(file) # on seperate line so video duration/end attributes can be read
 
         gap_before = float(audio_extent['@gapBefore']) # can be negative
@@ -219,16 +215,16 @@ def render(project_file: str, output_file: str, output_width: int, output_height
         # print(crop_start, crop_end, gap_before, audio_clip.duration)
         audio_clips.append(audio_clip)
         previous_clip_end += audio_clip.duration + max(0, gap_before) # always append next audio clip to end of previous one with added (positive) gapBefore
-        log(f'Added audio clip {extent_id} ("{file}").')
+        log(f'Added audio clip "{file}" (ID {extent_id})!')
 
-    log('Building audio clips done.')
+    log('Building audio clips done!')
 
     log('Start building title clips.')
     # then build title/text clips (are rendered transparently above main video clips)
     title_clips = []
     previous_clip_end = 0.0
     for i, extent_id in enumerate(placeholder_ids['Text']):
-        log(f'Adding title clip {extent_id}...')
+        log(f'Adding title clip {i+1}/{len(placeholder_ids["Text"])} (ID {extent_id}):')
         title_extent = get_extent(extent_id, title_extents)
         gap_before = float(title_extent['@gapBefore'])
         duration = float(title_extent['@duration'])
@@ -285,7 +281,7 @@ def render(project_file: str, output_file: str, output_width: int, output_height
             ).size[1] + title_clip_size_tolerance_margin # calculate title clip height when scrolling to not cut off text
         )
         
-        log(f'Creating title clip {extent_id}...')
+        log(f'Preloading title clip (ID {extent_id})...')
         title_clip = (
             TextClip(font=find_font_file(font_family), 
                     text=text_string, 
@@ -315,33 +311,33 @@ def render(project_file: str, output_file: str, output_width: int, output_height
         title_clips.append(title_clip)
 
         previous_clip_end += title_clip.duration + max(0, gap_before)
-        log(f'Added title clip {extent_id} ("{file}").')
+        log(f'Added title clip (ID {extent_id})!')
 
-    log('Building title clips done.')
+    log('Building title clips done!')
 
 
     log('Compositing video/title clips...')
     # video_composited = CompositeVideoClip([TextClip(font='segoeui.ttf', text="Test", duration=5, font_size=30).with_fps(30).with_duration(10)])
     video_composited = CompositeVideoClip(video_clips + title_clips) # put title clips on top of video clips
-    log('Compositing video/title clips done.')
+    log('Compositing video/title clips done!')
     log('Compositing audio clips...')
     audio_composited = CompositeAudioClip(list(map(lambda v: v.audio, video_clips)) + audio_clips)
-    log('Compositing audio clips done.')
+    log('Compositing audio clips done!')
     video_composited.audio = audio_composited
 
     log('Start writing video file...')
     # Write the result to a file (many options available!)
-    video_composited.write_videofile(output_file, fps=output_settings['fps'], threads=4)
-    log('Writing video file done.')
+    video_composited.write_videofile(output_file, fps=output_settings['fps']) # optional: set e.g. threads=4 for better performance, but ffmpeg normally detects optimal number automatically
+    log('Writing video file done!')
 
     log('Opening explorer...')
     open_explorer_on_file(output_file)
-    log('Opening explorer done.')
+    log('Opening explorer done!')
 
     log('Playing sound...')
     play_notification_sound()
-    log('Playing sound done.')
+    log('Playing sound done!')
     # TODO at end open explorer with rendered file selected
 
-    log('Rendering finished.')
+    log('Rendering finished!')
     print('\nEnd time: ' + str(get_current_datetime()) + '\n')
